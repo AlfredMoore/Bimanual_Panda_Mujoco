@@ -10,9 +10,8 @@ from robocasa.models.scenes.scene_registry import LayoutType, StyleType
 from robosuite import load_part_controller_config
 from termcolor import colored
 
-from stretch_mujoco import StretchMujocoSimulator
-from stretch_mujoco.utils import (
-    get_absolute_path_stretch_xml,
+from utils import (
+    get_absolute_path_panda_xml,
     insert_line_after_mujoco_tag,
     replace_xml_tag_value,
     xml_modify_body_pos,
@@ -20,9 +19,11 @@ from stretch_mujoco.utils import (
     xml_remove_tag_by_name,
 )
 
-from utils import get_absolute_path_panda_xml
-# from ament_index_python.packages import get_package_share_path
 import os
+
+models_path = os.path.dirname(__file__) + "/franka_emika_panda"
+default_scene_xml_path = models_path + "/scene.xml"
+default_robot_xml_path = models_path + "/panda.xml"
 
 def get_styles() -> OrderedDict:
     raw_styles = dict(
@@ -210,10 +211,19 @@ def model_generation_wizard(
     if robot_spawn_pose is not None:
         robot_base_fixture_pose = robot_spawn_pose
 
+    # robot_base_fixture_pose = {'name', 'pos', 'quat'}
+
     # add stretch to kitchen
     click.secho("\nMaking Robot Placement...\n", fg="yellow")
-    # xml = add_stretch_to_kitchen(xml, robot_base_fixture_pose)
     xml = add_panda_to_kitchen(xml, robot_base_fixture_pose)
+    print("panda1: ", robot_base_fixture_pose)
+    
+    # add second panda to kitchen
+    second_robot_base_fixture_pose = robot_base_fixture_pose.copy()
+    second_robot_base_fixture_pose['pos'] = '0.5, 0.5, 0.5'
+    print("panda2: ", second_robot_base_fixture_pose)
+    # xml = add_panda_to_kitchen(xml, robot_base_fixture_pose)
+
 
     if write_to_file is not None:
         with open(write_to_file, "w") as f:
@@ -250,23 +260,9 @@ def custom_cleanups(xml: str) -> Tuple[str, dict]:
     return xml, remove_robot_attrib
 
 
-def add_stretch_to_kitchen(xml: str, robot_pose_attrib: dict) -> str:
-    """
-    Add stretch robot to kitchen xml
-    """
-    print(
-        f"Adding stretch to kitchen at pos: {robot_pose_attrib['pos']} quat: {robot_pose_attrib['quat']}"
-    )
-    stretch_xml_absolute = get_absolute_path_stretch_xml(robot_pose_attrib)
-    # add Stretch xml
-    xml = insert_line_after_mujoco_tag(
-        xml,
-        f' <include file="{stretch_xml_absolute}"/>',
-    )
-    return xml
-
-
-def add_panda_to_kitchen(xml: str, robot_pose_attrib: dict) -> str:
+def add_panda_to_kitchen(xml: str, 
+                         robot_pose_attrib: dict,
+                         panda_tmp_xml: str = "panda_temp_abs.xml") -> str:
     """
     Add panda robot to kitchen xml
     """
@@ -274,7 +270,7 @@ def add_panda_to_kitchen(xml: str, robot_pose_attrib: dict) -> str:
         f"Adding panda to kitchen at pos: {robot_pose_attrib['pos']} quat: {robot_pose_attrib['quat']}"
     )
     # panda_xml_absolute = get_absolute_path_panda_xml(robot_pose_attrib)
-    panda_xml_absolute = get_absolute_path_panda_xml(robot_pose_attrib)
+    panda_xml_absolute = get_absolute_path_panda_xml(robot_pose_attrib, default_robot_xml_path, panda_tmp_xml)
     
     # add Panda xml
     xml = insert_line_after_mujoco_tag(
@@ -294,12 +290,9 @@ def main(task: str, layout: int, style: int, write_to_file: str):
         task=task,
         layout=layout,
         style=style,
-        # write_to_file=str(get_package_share_path('stretch_mujoco_ros2') / 'scene' / 'scene.xml'),
-        write_to_file= os.path.dirname(__file__) + '/franka_emika_panda' + '/scene_with_robot.xml',
+        write_to_file= models_path + '/scene_with_robot.xml',
         
     )
-    # robot_sim = StretchMujocoSimulator(model=model)
-    # robot_sim.start()
 
 
 if __name__ == "__main__":

@@ -15,12 +15,6 @@ models_path = os.path.dirname(__file__) + "/franka_emika_panda"
 default_scene_xml_path = models_path + "/scene.xml"
 default_robot_xml_path = models_path + "/panda.xml"
 
-pkg_path = str(importlib_resources.files("stretch_urdf"))
-model_name = "SE3"  # RE1V0, RE2V0, SE3
-tool_name = "eoa_wrist_dw3_tool_sg3"  # eoa_wrist_dw3_tool_sg3, tool_stretch_gripper, etc
-urdf_file_path = pkg_path + f"/{model_name}/stretch_description_{model_name}_{tool_name}.urdf"
-mesh_files_directory_path = pkg_path + f"/{model_name}/meshes"
-
 
 def compute_K(fovy: float, width: int, height: int) -> np.ndarray:
     """
@@ -44,48 +38,6 @@ def limit_depth_distance(depth_image_meters: np.ndarray, max_depth: float) -> np
     Limit depth distance
     """
     return np.where(depth_image_meters > max_depth, 0, depth_image_meters)
-
-
-class URDFmodel:
-    def __init__(self) -> None:
-        """
-        Load URDF model
-        """
-        self.urdf = urdf_loader.URDF.load(urdf_file_path, lazy_load_meshes=True)
-        self.joints_names = [
-            "joint_wrist_yaw",
-            "joint_wrist_pitch",
-            "joint_wrist_roll",
-            "joint_lift",
-            "joint_arm_l0",
-            "joint_arm_l1",
-            "joint_arm_l2",
-            "joint_arm_l3",
-            "joint_head_pan",
-            "joint_head_tilt",
-            "joint_gripper_finger_left",
-        ]
-
-    def get_transform(self, cfg: dict, link_name: str) -> np.ndarray:
-        """
-        Get transformation matrix of the link w.r.t. the base_link
-        """
-        lk_cfg = {
-            "joint_wrist_yaw": cfg["wrist_yaw"],
-            "joint_wrist_pitch": cfg["wrist_pitch"],
-            "joint_wrist_roll": cfg["wrist_roll"],
-            "joint_lift": cfg["lift"],
-            "joint_arm_l0": cfg["arm"] / 4,
-            "joint_arm_l1": cfg["arm"] / 4,
-            "joint_arm_l2": cfg["arm"] / 4,
-            "joint_arm_l3": cfg["arm"] / 4,
-            "joint_head_pan": cfg["head_pan"],
-            "joint_head_tilt": cfg["head_tilt"],
-        }
-        if "gripper" in cfg.keys():
-            lk_cfg["joint_gripper_finger_left"] = cfg["gripper"]
-            lk_cfg["joint_gripper_finger_right"] = cfg["gripper"]
-        return self.urdf.link_fk(lk_cfg, link=link_name)
 
 
 def replace_xml_tag_value(xml_str: str, tag: str, attribute: str, pattern: str, value: str) -> str:
@@ -177,7 +129,10 @@ def insert_line_after_mujoco_tag(xml_string: str, line_to_insert: str) -> str:
     return modified_xml
 
 
-def get_absolute_path_stretch_xml(robot_pose_attrib: dict = None) -> str:
+def get_absolute_path_panda_xml(robot_pose_attrib: dict = None, 
+                                robot_xml_path: str = default_robot_xml_path,
+                                panda_tmp_xml: str = "panda_temp_abs.xml",
+                                ) -> str:
     """
     Generates Robot XML with absolute path to mesh files
     Args:
@@ -185,49 +140,9 @@ def get_absolute_path_stretch_xml(robot_pose_attrib: dict = None) -> str:
     Returns:
         str: Path to the generated XML file
     """
-    print("DEFAULT XML: {}".format(default_robot_xml_path))
+    print("DEFAULT XML: {}".format(robot_xml_path))
 
-    with open(default_robot_xml_path, "r") as f:
-        default_robot_xml = f.read()
-
-    default_robot_xml = re.sub(
-        'assetdir="assets"', f'assetdir="{models_path + "/assets"}"', default_robot_xml
-    )
-
-    # find all the line which has the pattrn {file="something.type"}
-    # and replace the file path with the absolute path
-    pattern = r'file="(.+?)"'
-    for match in re.finditer(pattern, default_robot_xml):
-        file_path = match.group(1)
-        default_robot_xml = default_robot_xml.replace(
-            file_path, models_path + "/assets/" + file_path
-        )
-
-    if robot_pose_attrib is not None:
-        pos = f'pos="{robot_pose_attrib["pos"]}" quat="{robot_pose_attrib["quat"]}"'
-        default_robot_xml = re.sub(
-            '<body name="base_link" childclass="stretch">',
-            f'<body name="base_link" childclass="stretch" {pos}>',
-            default_robot_xml,
-        )
-
-    # Absosolute path converted streth xml
-    with open(models_path + "/stretch_temp_abs.xml", "w") as f:
-        f.write(default_robot_xml)
-    print("Saving temp abs path xml: {}".format(models_path + "/stretch_temp_abs.xml"))
-    return models_path + "/stretch_temp_abs.xml"
-
-def get_absolute_path_panda_xml(robot_pose_attrib: dict = None) -> str:
-    """
-    Generates Robot XML with absolute path to mesh files
-    Args:
-        robot_pose_attrib: Robot pose attributes in form {"pos": "x y z", "quat": "x y z w"}
-    Returns:
-        str: Path to the generated XML file
-    """
-    print("DEFAULT XML: {}".format(default_robot_xml_path))
-
-    with open(default_robot_xml_path, "r") as f:
+    with open(robot_xml_path, "r") as f:
         default_robot_xml = f.read()
 
     default_robot_xml = re.sub(
@@ -247,15 +162,18 @@ def get_absolute_path_panda_xml(robot_pose_attrib: dict = None) -> str:
         pos = f'pos="{robot_pose_attrib["pos"]}" quat="{robot_pose_attrib["quat"]}"'
         default_robot_xml = re.sub(
             '<body name="link0" childclass="panda">',
-            f'<body name="link0" childclass="panda">" {pos}>',
+            f'<body name="link0" childclass="panda" {pos}>',
             default_robot_xml,
         )
 
+    panda_temp_abs_xml = models_path + "/" + panda_tmp_xml
+    
     # Absosolute path converted streth xml
-    with open(models_path + "/panda_temp_abs.xml", "w") as f:
+    with open(panda_temp_abs_xml, "w") as f:
         f.write(default_robot_xml)
-    print("Saving temp abs path xml: {}".format(models_path + "/panda_temp_abs.xml"))
-    return models_path + "/panda_temp_abs.xml"
+    print("Saving temp abs path xml: {}".format(panda_temp_abs_xml))
+    return panda_temp_abs_xml
+
 
 def map_between_ranges(
     value: float, from_min_max: Tuple[float, float], to_min_max: Tuple[float, float]
