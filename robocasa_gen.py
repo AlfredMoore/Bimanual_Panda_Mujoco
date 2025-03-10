@@ -17,13 +17,17 @@ from utils import (
     xml_modify_body_pos,
     xml_remove_subelement,
     xml_remove_tag_by_name,
+    string_to_list,
+    list_to_string,
 )
 
 import os
 
 models_path = os.path.dirname(__file__) + "/franka_emika_panda"
-default_scene_xml_path = models_path + "/scene.xml"
-default_robot_xml_path = models_path + "/panda.xml"
+robotname = "panda_bimanual"
+default_scene_xml_path = models_path + "/scene_" + robotname + "_kitchen.xml"
+default_robot_xml_path = models_path + "/" + robotname + ".xml"
+default_robot_xml_temp_path = models_path + "/" + robotname + "_temp_abs.xml"
 
 def get_styles() -> OrderedDict:
     raw_styles = dict(
@@ -168,7 +172,7 @@ def model_generation_wizard(
     )
     print(
         colored(
-            f"Showing configuration:\n    Layout: {layouts[layout]}\n    Style: {styles[style]}",
+            f"Showing configuration:\n    Layout: {layout} {layouts[layout]}\n    Style: {style} {styles[style]}",
             "green",
         )
     )
@@ -207,24 +211,24 @@ def model_generation_wizard(
         }
 
     xml, robot_base_fixture_pose = custom_cleanups(xml)
+    print(f"original pos:", robot_base_fixture_pose["pos"])
+    print(f"original quat:", robot_base_fixture_pose["quat"])
+    # robot_base_fixture_pose["pos"] = "3.2 -3.1 0.93"
+    # robot_base_fixture_pose["quat"] = "0.7071068 0 0 0.7071068"
+    # robot_base_fixture_pose["quat"] = "1 0 0 0"
 
+    from config import layout_to_robot_spawn_qpos
+    robot_base_fixture_pose = layout_to_robot_spawn_qpos[layout]
+    
     if robot_spawn_pose is not None:
         robot_base_fixture_pose = robot_spawn_pose
+        
 
-    # robot_base_fixture_pose = {'name', 'pos', 'quat'}
+    # robot_base_fixture_pose = {'name': 'robot0_base', 'pos': '0.5 -0.8 0', 'quat': '0.707107 0 0 0.707107'}   # in task 0, payout 0
 
     # add stretch to kitchen
     click.secho("\nMaking Robot Placement...\n", fg="yellow")
-    xml = add_panda_to_kitchen(xml, robot_base_fixture_pose)
-    print("panda1: ", robot_base_fixture_pose)
-    
-    # add second panda to kitchen
-    second_robot_base_fixture_pose = robot_base_fixture_pose.copy()
-    second_robot_base_fixture_pose['pos'] = '0.5, 0.5, 0.5'
-    print("panda2: ", second_robot_base_fixture_pose)
-    # xml = add_panda_to_kitchen(xml, robot_base_fixture_pose)
-
-
+    xml = add_panda_to_kitchen(xml, robot_base_fixture_pose, default_robot_xml_temp_path)
     if write_to_file is not None:
         with open(write_to_file, "w") as f:
             f.write(xml)
@@ -262,7 +266,7 @@ def custom_cleanups(xml: str) -> Tuple[str, dict]:
 
 def add_panda_to_kitchen(xml: str, 
                          robot_pose_attrib: dict,
-                         panda_tmp_xml: str = "panda_temp_abs.xml") -> str:
+                         robot_xml_temp_path: str) -> str:
     """
     Add panda robot to kitchen xml
     """
@@ -270,7 +274,7 @@ def add_panda_to_kitchen(xml: str,
         f"Adding panda to kitchen at pos: {robot_pose_attrib['pos']} quat: {robot_pose_attrib['quat']}"
     )
     # panda_xml_absolute = get_absolute_path_panda_xml(robot_pose_attrib)
-    panda_xml_absolute = get_absolute_path_panda_xml(robot_pose_attrib, default_robot_xml_path, panda_tmp_xml)
+    panda_xml_absolute = get_absolute_path_panda_xml(robot_pose_attrib, default_robot_xml_path, robot_xml_temp_path)
     
     # add Panda xml
     xml = insert_line_after_mujoco_tag(
@@ -286,11 +290,19 @@ def add_panda_to_kitchen(xml: str,
 @click.option("--style", type=int, default=None, help="kitchen style (choose number 0-11)")
 @click.option("--write-to-file", type=str, default=None, help="write to file")
 def main(task: str, layout: int, style: int, write_to_file: str):
+    
+    robot_spawn_pose = None
+    # robot_spawn_pose = {
+    #     "pos": "4.55 -0.8 0",
+    #     "quat": "1 0 0 0",
+    # }
+    
     model, xml, objects_info = model_generation_wizard(
         task=task,
         layout=layout,
         style=style,
-        write_to_file= models_path + '/scene_with_robot.xml',
+        write_to_file= default_scene_xml_path,
+        robot_spawn_pose=robot_spawn_pose,
         
     )
 

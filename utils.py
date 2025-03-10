@@ -131,7 +131,7 @@ def insert_line_after_mujoco_tag(xml_string: str, line_to_insert: str) -> str:
 
 def get_absolute_path_panda_xml(robot_pose_attrib: dict = None, 
                                 robot_xml_path: str = default_robot_xml_path,
-                                panda_tmp_xml: str = "panda_temp_abs.xml",
+                                robot_xml_temp_path: str = "/tmp/robot_temp_abs.xml",
                                 ) -> str:
     """
     Generates Robot XML with absolute path to mesh files
@@ -161,12 +161,12 @@ def get_absolute_path_panda_xml(robot_pose_attrib: dict = None,
     if robot_pose_attrib is not None:
         pos = f'pos="{robot_pose_attrib["pos"]}" quat="{robot_pose_attrib["quat"]}"'
         default_robot_xml = re.sub(
-            '<body name="link0" childclass="panda">',
-            f'<body name="link0" childclass="panda" {pos}>',
+            '<body name="base_link" childclass="panda">',
+            f'<body name="base_link" childclass="panda" {pos}>',
             default_robot_xml,
         )
 
-    panda_temp_abs_xml = models_path + "/" + panda_tmp_xml
+    panda_temp_abs_xml = robot_xml_temp_path
     
     # Absosolute path converted streth xml
     with open(panda_temp_abs_xml, "w") as f:
@@ -197,3 +197,16 @@ def get_depth_color_map(depth_image, clor_map=cv2.COLORMAP_JET):
     depth_8bit = ((1 - normalized_depth) * 255).astype(np.uint8)
     depth_8bit = cv2.applyColorMap(depth_8bit, clor_map)
     return depth_8bit
+
+
+def string_to_list(string: str) -> list:
+    """
+    Convert a string to a list
+    """
+    return [float(x) for x in string.split()]
+
+def list_to_string(lst: list) -> str:
+    """
+    Convert a list to a string
+    """
+    return " ".join(str(x) for x in lst)
